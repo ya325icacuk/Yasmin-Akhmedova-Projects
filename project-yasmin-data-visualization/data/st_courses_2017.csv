@@ -1,0 +1,24 @@
+Course_code,Course_name,First,Upper_second,Lower_second,Third,Fail,Total_students_2016/17,Average_class_size_2016/17,Capped_2016/17,Lecture_capture,Value,exam,coursework,project,assessment,presentation,Teaching_hours,Academic_year,Level_of_study
+ST102,Elementary Statistical Theory,42.9,17.4,14.7,14.1,10.9,588,15,No,Yes (MT & LT),One Unit,100%,,,,,87,2017/18,Year 1
+ST107,Quantitative Methods (Statistics),41.0,19.0,16.2,12.6,11.2,364,16,No,Yes (LT),Half Unit,100,,,,,34,2017/18,Year 1
+ST108,Statistical Methods for the Social Sciences,43.6,15.4,23.1,12.8,5.1,7,11,No,One Unit,,80,,,20,,62,2017/18,Year 1
+ST201,Statistical Models and Data Analysis,63.0,24.7,11.9,0.0,0.5,108,29,No,Yes (LT),Half Unit,80,20,,,,40,2017/18,Year 2
+ST202,"Probability, Distribution Theory and Inference",45.0,19.1,13.3,15.2,7.4,184,63,No,Yes (MT & LT),One Unit,100,,,,,83,2017/18,Year 2
+ST205,Sample Surveys and Experiments,54.7,29.7,11.0,2.9,1.7,73,14,No,Yes (MT),Half Unit,80,20,,,,33,2017/18,Year 2
+ST206,Probability and Distribution Theory,,,,,,Unavailable,Unavailable,No,Half Unit,,100,,,,,32,2017/18,Year 2
+ST211,Applied Regression,32.7,43.3,15.4,6.7,1.9,33,16,Yes (60),Half Unit,,50,,50,,,32,2017/18,Year 2
+ST213,"Introduction to Pricing, Hedging and Optimization",,,,,,Unavailable,Unavailable,No,Half Unit,,100,,,,,30,2017/18,Year 2
+ST226,Actuarial Investigations: Financial,59.5,14.0,11.4,7.3,7.9,122,41,No,Yes (MT),Half Unit,100,,,,,29,2017/18,Year 2
+ST227,Survival Models,53.4,17.4,12.1,7.8,9.3,118,39,No,Half Unit,,100,,,,,33,2017/18,Year 2
+ST300,Regression and Generalised Linear Models,38.5,18.9,17.5,16.8,8.4,45,13,No,Yes (LT),Half Unit,85,,15,,,38,2017/18,Year 3
+ST301,Actuarial Mathematics (Life),,,,,,63,35,No,Half Unit,,100,,,,,30,2017/18,Year 3
+ST302,Stochastic Processes,24.0,17.9,19.7,21.8,16.6,80,45,No,Half Unit,,100,,,,,29,2017/18,Year 3
+ST303,Stochastic Simulation,,,,,,42,24,No,Yes (LT),Half Unit,50,,100%,,,30,2017/18,Year 3
+ST304,Time Series and Forecasting,23.7,22.9,21.2,21.2,11.0,84,31,No,Yes (LT),Half Unit,100,,,,,30,2017/18,Year 3
+ST306,Actuarial Mathematics (General),57.1,11.0,12.9,13.8,5.2,69,76,No,Yes (MT),Half Unit,100,,,,,30,2017/18,Year 3
+ST307,Aspects of Market Research,32.8,41.4,19.0,6.9,0.0,23,5,Yes (20),Yes (MT),Half Unit,100,,,,,30,2017/18,Year 3
+ST308,Bayesian Inference,35.1,23.6,20.9,13.5,6.8,51,26,Yes (60),Yes (LT),Half Unit,80,,20,,,31,2017/18,Year 3
+ST312,Applied Statistics Project,44.4,28.9,24.4,2.2,0.0,17,18,Yes (20),Half Unit,,,,90,,10,19,2017/18,Year 3
+ST326,Financial Statistics,,,,,,Unavailable,Unavailable,No,Half Unit,,100,,,,,30,2017/18,Year 3
+ST327,Market Research: An Integrated Approach,35.8,54.0,8.0,1.1,1.1,57,15,Yes (60),Yes (MT),One Unit,60,25,,,15,36,2017/18,Year 3
+ST330,Stochastic and Actuarial Methods in Finance,60.3,17.8,8.9,7.5,5.6,70,79,No,Yes (MT & LT),One Unit,100,,,,,60,2017/18,Year 3

@@ -1,0 +1,834 @@
+---
+title: HEALTH INSURANCE PREMIUMS - FACTORS AND PREDICTIONS
+author: "33847, 34329, 31380"
+date: "Februrary 2022"
+output:
+  pdf_document: 
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+number_sections: yes
+theme: united
+highlight: tango
+toc: yes
+toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+\newpage 
+# SECTION 1 - SUMMARY 
+The study focuses on analyzing socio-demographic characteristics which determine policy holders' insurance premiums and predicting those premiums. We develop five statistical models using various Machine Learning techniques. We discover that in general, being older, having higher BMI and more dependents, smoking and living in the North of the US is associated with higher insurance premiums. We assessed each model's predictive accuracy, evaluated limitations and highlighted potential improvements. We further outlined directions for extending our study.
+
+# SECTION 2 - INTRODUCTION
+With health care prices increasing rapidly and rising instances of new diseases, health insurance is considered to be a necessity for every household. Health insurance provides households with a financial safety net at times of medical emergencies. By buying health insurance policies, the insured agree to pay regular premiums and are guaranteed to be reimbursed for expenses incurred due to medical emergencies. 
+
+Actuaries price health insurance policies to help insurance companies stay afloat and make profits by collecting premiums exceeding the total amount paid to the insured. In order to do so, actuaries try to predict the expected medical bills which will be incurred in the future by insurance companies. To define the insurance premiums a number of factors are analysed including data on policy holders’ socio-demographic characteristics. In theory, higher premiums are charged for those who are more likely to incur higher medical costs in the future. 
+
+In this study we aim to predict and explore factors impacting medical costs incurred by health insurance companies. For this we analyze cross-sectional social and demographic data from Kaggle, a public data platform. The data contains 1,338 observations which we used to build and analyze the five statistical models using multiple machine learning methods:
+
+  - ***Model 1*** - Baseline Model -  ***Multiple Linear Regression*** Model obtained using Best Subset model selection procedure. The Baseline Model will be used for comparison with the other four more sophisticated models below. 
+  
+  - ***Model 2*** - ***Stochastic Gradient Descent*** Model. 
+  
+  - ***Model 3*** - ***General Additive Model (GAM)*** using Smoothing Splines to achieve higher predictive accuracy while still retain a relatively high degree of model interpretability. 
+  
+  - ***Model 4*** - ***High Dimensional*** Model built by adding interactions and applying transformations to the Baseline Model.
+  
+  - ***Model 5*** - ***Boosted Regression Trees*** Model to achieve higher predictive accuracy without emphasis on interpretability.
+
+Seven characteristics `CHARGE`, `AGE`, `BMI`, `CHILDREN`, `SEX`, `SMOKER` and `REGION` were extracted from the Kaggle dataset. `CHARGE` was chosen to be the outcome variable. The rest of the variables were selected to be predictors. Please see more details on the variables in the tables below.
+
+```{r, include = FALSE}
+library('knitr')
+```
+
+```{r, echo = FALSE}
+table_out = matrix(NA, nrow = 1, ncol = 3)
+colnames(table_out) = c("Outcome variable", "Description", "Assumptions")
+table_out[1,] = c("CHA-RGE", "Individual medical costs billed by health insurance companies, USD", "Medical costs billed by health insurance companies are correlated with the insurance premiums, the primary subject of our interest. USD are assumed to be the measurement units.")
+kable(table_out, caption = "OUTCOME VARIABLE")
+```
+
+```{r, echo = FALSE}
+table_pred = matrix(NA, nrow = 6, ncol = 5)
+colnames(table_pred) = c("#", "Predictor", "Description", "Type", "Assumptions")
+table_pred[1,] = c("1", "AGE", "Age of policyholders,years", "Continuous","")
+table_pred[2,] = c("2","BMI", "Body mass index of policyholders,kg/m^2", "Continuous","")
+table_pred[3,] = c("3","CHILD-REN", "Number of children/dependents covered by health insurance,0 to 5", "Categorical*", "Dependents include only children")
+table_pred[4,] = c("4","SEX", "Gender of policyholders,male/female", "Categorical","")
+table_pred[5,] = c("5","SMO-KER", "Smoking status,yes/no", "Categorical","")
+table_pred[6,] = c("6","REGI-ON", "Policyholders' residential area in the US,northeast,/northwest/southeast/southwest", "Categorical","")
+kable(table_pred, caption = "PREDICTOR VARIABLES")
+```
+*Please note that we treat CHILDREN as a continuous variable for Models 2,3 and 5, as it takes six levels (integers from 0 to 5).
+
+```{r, include = FALSE}
+library(readxl)
+Insurance_data <- read_excel("Insurance_data_machine_learning.xls")
+View(Insurance_data)
+attach(Insurance_data) #access all variables
+```
+
+# SECTION 3 - EXPLORATORY DATA ANALYSIS
+Exploratory data analysis (EDA) is carried out to determine the quality of the data that we will be working with:
+
+  (i) identify any striking issues from general data overview and summary statistics,
+  (ii) check for any missing data,
+  (iii) examine presence of any interactions/need for any transformations based on scatterplots of the continuos predictors. 
+
+#### Step (i) - no striking issues, please see below. 
+```{r, echo = FALSE}
+summary(Insurance_data)
+```
+\newpage 
+#### Step (ii) - no missing data, please see below. 
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 5}
+library(visdat)
+vis_miss(Insurance_data)
+```
+
+#### Step (iii) - interactions present, transformations needed, please see below. 
+```{r, include = FALSE}
+library(tidymodels)
+```
+
+***Plot of CHARGE against BMI:***
+
+We observe an approximate positive relationship, please see the below plot. However, the data points are scattered in a funnel shape suggesting that we may need to consider a transformation of `BMI`. This will be done in Model 4.  
+
+```{r, echo = FALSE, fig.height = 2, fig.width = 3.5}
+ggplot(Insurance_data, aes(x = BMI, y = CHARGE)) + geom_point()
+```
+
+***Plot of CHARGE against AGE:***
+
+We observe that the data lies in three approximately parallel lines, please refer to the plots below. This suggests that there may be other variables which lead to differences in medical costs for similar age groups. For example, plotting `AGE` against `CHARGE` while accounting for SMOKER illustrates the presence of the interaction. Therefore, we will explore further interaction terms in Model 4. 
+
+```{r, echo = FALSE, fig.height = 2.3, fig.width = 3.8}
+par(mfrow=c(2,1))
+ggplot(Insurance_data, aes(x = AGE, y = CHARGE)) + geom_point()
+ggplot()+
+geom_point(aes(x=AGE, y= CHARGE, col = "SMOKER"), data = subset(Insurance_data,SMOKER == 'yes'))+
+geom_point(aes(x=AGE, y= CHARGE, col = "NON-SMOKER"), data= subset(Insurance_data, SMOKER == 'no'))+
+scale_colour_manual("",values = c("SMOKER"="blue","NON-SMOKER"="black")) + 
+theme(legend.position = 'top')
+
+```
+
+# SECTION 4 - DATA PREPARATION
+The raw Kaggle data is now edited so that machine learning methods can be applied. 
+
+We obtain six datasets which will be used to train and test our models, see below. First, the original data is split into the training and test sets according to the 70/30 ratio: `Insurance_train` and `Insurance_test`. Then, for the purpose of building the five models and assessing their predictive accuracy, we transform each set into three datasets as follows: `original dataset`, `standardized dataset` and `recoded dataset`, please refer to the summary table below. 
+
+```{r, echo = FALSE}
+model_table = matrix(NA, nrow = 5, ncol = 3)
+colnames(model_table) = c("Model", "Training set used", "Test set used")
+model_table[1,] = c("Model 1", "Recoded training dataset: Insurance_train_recoded", "Recoded test dataset: Insurance_test_recoded")
+model_table[2,] = c("Model 2", "Standardized training dataset: Insurance_train_std", "Standardized test dataset: Insurance_test_std")
+model_table[3,] = c("Model 3", "Original training dataset: Insurance_train", "Original test dataset: Insurance_test")
+model_table[4,] = c("Model 4", "Recoded training dataset: Insurance_train_recoded", "Recoded test dataset: Insurance_test_recoded")
+model_table[5,] = c("Model 5","Original training dataset: Insurance_train","Original test dataset: Insurance_test")
+kable(model_table, caption = "DATASETS FOR BUILDING MODELS")
+```
+
+Let us explain the steps we undertook to obtain the six datasets for the five models. 
+
+#### Step 1 - load the libraries to perform data editing and split the data into a training/test set.
+```{r}
+library(recipes)
+library(rsample)
+set.seed(1) #obtain the 'same' 'random' training/test sets every time a code is run
+train_index <- initial_split(Insurance_data, prop = 0.7)
+train_data <- training(train_index) #training dataset
+test_data <- testing(train_index) #test dataset
+```
+
+#### Step 2 - build a recipe to convert categorical predictors into dummy variables and then obtain `Insurance_train` and `Insurance_test` datasets. 
+Given that both the training and the test datasets contain the same number of variables (the sets differ only by the number of observations), we chose to create our initial recipe based on the training data. 
+```{r}
+initial_recipe <- recipe(CHARGE ~ ., data = train_data)
+```
+We keep in mind that the same recipe will later be applied to the test data as well. 
+
+Further, using the recipe, we convert three categorical variables SMOKER, SEX and REGION into dummy variables:
+```{r}
+indicator_variables <- initial_recipe %>% 
+  step_dummy(all_nominal_predictors()) #all categorical variables converted into dummies
+```
+
+The following five new dummy variables were created:
+```{r, echo = FALSE}
+var_table = matrix(NA, nrow = 3, ncol = 2)
+colnames(var_table) = c("Original Categorical Variable", "Dummy Variable(s)")
+var_table[1,] = c("SMOKER, 2 levels",  "SMOKER_yes")
+var_table[2,] = c("SEX, 2 levels", "SEX_male")
+var_table[3,] = c("REGION, 4 levels",  "REGION_northwest, REGION_southeast, REGION_southwest")
+kable(var_table, caption = "FIVE DUMMY VARIABLES")
+```
+
+Update the recipe with the newly created dummy variables:
+```{r}
+trained_recipe <- prep(indicator_variables, training = train_data) 
+```
+
+Apply the recipe to the training/test datasets to obtain: `Insurance_train` and `Insurance_test` datasets which contain the five new dummy variables instead of the original `SMOKER`, `SEX` and `REGION` categorical variables. 
+```{r}
+Insurance_train <- bake(trained_recipe, new_data = train_data) 
+Insurance_test <- bake(trained_recipe, new_data = test_data)
+```
+
+#### Step 3 - standardize predictors to create standardized training and test datasets: `Insurance_train_std` and `Insurance_test_std`:
+Given that all predictors are numeric, we scale and centre the predictors:
+```{r}
+standardized_variables <- indicator_variables %>% 
+  step_center(all_numeric_predictors()) %>% #all numeric data have mean of 0
+  step_scale(all_numeric_predictors()) #all numeric data have standard deviation of 1
+```
+
+Now we update the recipe with the standardized predictors: 
+```{r}
+further_trained_recipe <- prep(standardized_variables, training = train_data) 
+```
+
+Apply the updated recipe to the training/test datasets to obtain the two standardized sets `Insurance_train_std` and `Insurance_test_std`:
+```{r}
+Insurance_train_std <- bake(further_trained_recipe, new_data = train_data)
+Insurance_test_std <- bake(further_trained_recipe, new_data = test_data)
+```
+#### Step 4 -  regroup CHILDREN and REGION into KIDS and REGION_south, respectively, to obtain `Insurance_train_recoded` and `Insurance_test_recoded`. 
+Regrouping will simplify our further analysis. Below see the summary of the new variables:
+```{r, echo = FALSE}
+table_regroup = matrix(NA, nrow = 2, ncol = 3)
+colnames(table_regroup) = c("Original Variable", "Re-grouped Binary Variable ", "Comments")
+table_regroup[1,] = c("CHILDREN, categorical, 6 levels", "KIDS", "The binary variable KIDS takes 1 if CHILDREN >= 1 and 0 otherwise.")
+table_regroup[2,] = c("REGION, categorical, 4 levels ", "REGION_south", "he binary variable REGION_south takes 1 if REGION = southeast OR southwest, 0 otherwise")
+kable(table_regroup, caption = "REGROUPED BINARY VARIABLES")
+```
+
+`CHILDREN` into `KIDS`:
+```{r, warning=FALSE}
+Insurance_train_recoded = (Insurance_train)
+Insurance_train_recoded$KIDS[Insurance_train_recoded$CHILDREN == 0] <- 0
+Insurance_train_recoded$KIDS[Insurance_train_recoded$CHILDREN >= 1] <- 1
+Insurance_test_recoded = Insurance_test
+Insurance_test_recoded$KIDS[Insurance_test_recoded$CHILDREN == 0] <- 0
+Insurance_test_recoded$KIDS[Insurance_test_recoded$CHILDREN >= 1] <- 1
+```
+
+`REGION` into `REGION_south`:
+```{r}
+Insurance_train_recoded$REGION_south <- Insurance_train_recoded$REGION_southeast + 
+  Insurance_train_recoded$REGION_southwest
+Insurance_test_recoded$REGION_south <- Insurance_test_recoded$REGION_southeast + 
+  Insurance_test_recoded$REGION_southwest
+```
+
+```{r, include = FALSE}
+Insurance_train_recoded = subset(Insurance_train_recoded, select = -c(CHILDREN, REGION_northwest,REGION_southeast,REGION_southwest))
+Insurance_test_recoded = subset(Insurance_test_recoded, select = -c(CHILDREN, REGION_northwest,REGION_southeast,REGION_southwest))
+```
+
+```{r, include = FALSE}
+attach(Insurance_train_recoded)
+attach(Insurance_test_recoded)
+```
+
+At this point we have performed all necessary steps for starting to create the models. 
+
+# SECTION 5 - FIVE MODELS
+In this section we will build the five models of interest:
+
+  - Model 1: Multiple Linear Regression Model
+  - Model 2: Stochastic Gradient Descent Model
+  - Model 3: General Additive Model (GAM) using Smoothing Splines
+  - Model 4: High Dimensional Model 
+  - Model 5: Boosted Regression Trees Model
+
+## SUB-SECTION 5.1 - MODEL 1 - MULTIPLE LINEAR REGRESSION MODEL
+To build a multiple linear regression model we choose to use the ***Best Subset*** variables selection method. ***Best Subset*** is used to ensure that all possible combinations of the six predictors are considered and we indeed obtain the best possible model. To perform Best Subset selection, we fit a least squares regression model for every possible combination. We then use adjusted R^2, Cp and BIC to select the best model.
+
+Below we provide steps taken to obtain Model 1, interpret it and assess its predictive accuracy.  
+```{r, echo = FALSE}
+var_mlr = matrix(NA, nrow = 4, ncol = 2)
+var_mlr[1,] = c("Model",  "Model 1 - Multiple Linear Regression Model")
+var_mlr[2,] = c("Variables Selection Method", "Best Subset")
+var_mlr[3,] = c("Datasets Used",  "Insurance_train_recoded, Insurance_test_recoded")
+var_mlr[4,] = c("Comment",  "KIDS and REGION_south are used instead of CHILDREN and REGION to ease interpretation")
+kable(var_mlr, caption = "Model 1 Summary")
+```
+
+#### Step 1 - load the library which will be used to visualise the optimal variables based on the three criteria: Adjusted R^2, Cp and BIC  
+```{r}
+library(leaps)
+regfit.full <- regsubsets(CHARGE ~ . , data = Insurance_train_recoded, nvmax = 6) 
+reg.summary <- summary(regfit.full)
+```
+
+
+#### Step 2 - perform best subset selection using the Adjusted R^2, Cp and BIC criteria to obtain the best model. 
+The best subsets method, under all three criteria suggests that a model excluding the variable `SEX` may be considered as the best model:
+
+```{r, fig.height= 7.5, fig.width= 9, echo = FALSE}
+par(mfrow = c(2, 2))
+plot (regfit.full , scale = "adjr2")
+plot (regfit.full , scale = "Cp")
+plot (regfit.full , scale = "bic")
+```
+
+#### Step 3 - Model 1 analysis and interpretation.
+From the below summary statistics, the p values show that the continuous variables `AGE` and `BMI` as well as the binary variable `SMOKER_ye`s are highly significant with p values less than $2 * 10^{-16}$. The binary variables `KIDS` and `REGION_south` are significant at the 10% level. The F statistic was found to be 520 with a p-value of less than $2 * 10^{-16}$. 
+
+These allows us to conclude that, overall, Model 1 has a high explanatory power:
+```{r}
+linear_regression_model <- lm(CHARGE ~ AGE + BMI + SMOKER_yes + KIDS + REGION_south,
+                              data = Insurance_train_recoded) 
+summary(linear_regression_model)
+```
+
+Based on the regression coefficients, we observe holding all other variables fixed, that:
+
+- ***AGE***: Medical costs billed by health insurance tend to increase with age. Indeed as an individual gets older, they are closer to their life expectancy and therefore insurance premiums tend to increase^[Estevez, E. 2021, _How Age Affecets Lifee Insurance_, viewed 2 Februray, 2022, https://www.investopedia.com/articles/personal-finance/022615/how-age-affects-life-insurance-rates.asp].    
+
+- ***BMI***: Similarly, medical costs billed by health insurance tend to increase with BMI. Having a higher BMI can be an indicator for obesity which puts individuals at a higher risk for certain serious illnesses such as type II diabetes, heart disease etc. And therefore it is likely for an individual with a high BMI to have higher medical costs^[LifeSEARCH, 2022. _What is BMI and why is it important?_, viewed February 2, 2022, https://www.lifesearch.com/advice-and-guides/what-is-bmi-and-why-is-it-important].
+  
+  Comparing the coefficients for the two continuous variables, it can be observed that the coefficient for `BMI` is larger than the coefficient for `AGE`. Therefore, it can be inferred that `BMI` has a higher association with medical costs billed by health insurance.
+
+- ***SMOKER_yes***: The coefficient for `SMOKER_yes` is positive indicating that an individual who is a smoker has, on average, higher medical costs. Indeed smoking has proven to be a major cause of serious illnesses such as cancer, heart disease, etc^[Izumi, Y., Tsuji, I., Ohkubo, T., Kuwahara, A., Nishino, Y., Hisamichi, S., 2001. _Impact of smoking habit on medical care use and its costs: a prospective observation of National Health Insurance beneficiaries in Japan_, viewed February 2, 2022, https://academic.oup.com/ije/article/30/3/616/736943]. 
+
+  Note that `SMOKER_yes`' coefficient has the highest absolute value, indicating that whether an individual smokes or not has the highest association with medical costs billed by health insurance compared to the rest of the binary variables.
+
+- ***KIDS***: Similarly, individuals who have at least one dependent tend to have higher medical costs. This is expected as the dependents are also covered by health insurance and therefore the medical costs for multiple individuals are taken into account.
+
+- ***REGION_south***: The coefficient for `REGION_south` is negative, indicating that an individual based in the North of the US has, on average, higher medical costs.
+
+#### Step 5 - assessing prediction accuracy of Model 1. 
+***Root Mean Squared Error***(RMSE) will be used to assess prediction accuracy throughout the report. The RMSE is the standard deviation of the residuals (i.e. prediction errors), measuring how far the true observations are from the predicted ones. In other words, the RMSE shows how spread out the residuals are. The higher RMSE is, the more likely it is that insurance premiums will be over or under-estimated. Based on the test dataset we calculate the RMSE for Model 1 and find it to be USD 5,688. 
+
+Below is a plot illustrating predicted `CHARGE` values against the observed ones. The closer the points lie to the 45* line, the more accurate the predictions are.
+```{r, include = FALSE}
+predictions = predict(linear_regression_model, newdata = Insurance_test_recoded) #predicted CHARGE 
+test_results = bind_cols(predictions, Insurance_test_recoded %>% select(CHARGE)) #predicted vs observed
+test_results = rename(test_results,  CHARGE_PRED= ...1, CHARGE_ACTUAL = CHARGE) #rename the columns
+rmse(test_results, truth = CHARGE_ACTUAL, estimate = CHARGE_PRED) #root mean squared error in USD
+```
+
+```{r, echo = FALSE, fig.height = 3, fig.width = 4}
+ggplot(test_results, aes(x = CHARGE_PRED, y = CHARGE_ACTUAL)) + 
+  geom_abline(lty = 2) + #45 degree diagonal line:
+  geom_point(alpha = 0.5) + 
+  labs(y = "Predicted CHARGE values", x = "Observed CHARGE values") +
+  coord_obs_pred() #scale and size the x- and y-axis uniformly:
+```
+
+The RMSE value of USD 5,688 suggests that the predictive accuracy of the model is not as good. Further examining the plot above, it can be observed that the predicted values lie closely to the observed values for small values of CHARGE (below USD 20,000) suggesting that that the predictive accuracy for CHARGE is better for smaller values than it is for larger values.
+
+***
+***CONCLUSION***: we arrived at the Multiple Linear Regression Model 1:
+
+_CHARGE = -12,697 + 260.2(AGE) + 355.86(BMI) - 752.51(REGION_south) + 730.91(KIDS) + 23,105.34(SMOKER_yes)_
+
+By analyzing the coefficients of the model, we conclude that being older, having a higher BMI, living in the North of the US, having children/dependents and smoking were are five characteristics associated with higher medical costs billed by health insurance providers. 
+
+By looking at the RMSE value and the plot of the predicted `CHARGE` values versus the observed ones, we infer that the predictive accuracy is not the best and should be improved, especially for larger values of `CHARGE`. These will be further examined in Models 2 to 5. 
+
+Model 1 will be used as a baseline for making comparisons with the Models 2 to 5. 
+
+## SUB-SECTION 5.2 - MODEL 2 - STOCHASTIC GRADIENT DESCENT MODEL
+
+Our Model 2 is a multiple linear regression model built using Stochastic Gradient Descent (SGD). We chose to use SGD rather than Gradient Descent because we consider the Insurance dataset to have a relatively large number of observations, which will allow for our model to learn faster in comparison to the Gradient Descent approach^[Dutta, S., 2019. _Why Stochastic Gradient Descent works?_, viewed 2 Februray, 2022, https://towardsdatascience.com/https-towardsdatascience-com-why-stochastic-gradient-descent-works-9af5b9de09b8].
+
+To perform stochastic gradient descent calculations, we created separate dataframes for the predictor variables and the outcome variable. The standardized datasets: `Insurance_train_std` and `Insurance_test_std` are used. Using standardized data allows us to avoid biasing our Model 2. Such bias is possible to occur as in the SGD calculation we will  constantly update values of the model parameters (as per different random samples)^[Loukas, S., 2020, _How and why to Standardize your data: A python tutorial_, viewed February 2, 2022, https://towardsdatascience.com/how-and-why-to-standardize-your-data-996926c2c832].
+
+```{r}
+pred_train <- Insurance_train_std[, -4] #training data for all predictors
+out_train <- Insurance_train_std[, 4] #training data for outcome CHARGE
+predictor_test <- Insurance_test_std[, -4] #test data for all predictors
+outcome_test <- Insurance_test_std[, 4] #test data for outcome CHARGE
+```
+
+#### Step 1 - add a column of 1s' to the training data for predictors to account for an intercept term and specify the loss function. 
+
+```{r}
+int <- rep(1, nrow(pred_train)) #creating a column of 1's for the intercept term
+pred_int_train <- cbind(int, pred_train) #adding the above column to predictor training data
+```
+
+To execute SGD, we first specify our loss function. The loss function that we will use is the altered Mean-Squared Error function. This is used to ensure the gradient of our chosen loss function is not a constant. Please find the expression for the function below.
+
+$$ \dfrac{1}{2n}(Y - X\beta^T)^T(Y - X\beta^T) $$
+Where:  
+- $n$ is the number of observations  
+- $Y$ is the vector of observed values of `CHARGE`  
+- $X\beta^T$ is vector of predicted values of `CHARGE`  
+- $\beta$ is the vector of the regression parameters  
+
+Next, we need to minimize the above loss function. We do so by calculating its partial derivative with respect to each parameter in the regression model. We obtain the following expression for the partial derivative with respect to $\beta$:
+
+$$\dfrac{1}{n}X^T(X\beta^T - Y)$$
+
+#### Step 2 - define a function to calculate the partial derivative of the loss function.
+
+In this step we will write a code^[Topor, J., 2016 _Multivariate Linear Regression Analysis using Stochastic Gradient Descent_, viewed February 2, 2022, https://rpubs.com/jt_rpubs/279269] to obtain the above partial derivative: 
+```{r}
+loss_par_deriv <- function(pred_int_train, out_train, beta) {
+   part_deriv <- (1/nrow(out_train))*(t(pred_int_train) %*% ((pred_int_train %*% t(beta))
+                                                             - out_train))
+  return(t(part_deriv))
+}
+```
+
+#### Step 3 - define the SGD function.
+Next we will construct the SGD function in which we randomly produce various smaller samples each containing 5 observations. We then iterate over these smaller samples 10,000 times. Note that $\beta$ is updated after each iteration.
+
+The SGD function^[Topor, J., 2016 _Multivariate Linear Regression Analysis using Stochastic Gradient Descent_, viewed February 2, 2022, https://rpubs.com/jt_rpubs/279269] is as follows. It will be used in Step 4 for further SGD calculation.
+```{r}
+stoch_gradDescent <- function(pred_train, out_train, alpha, n){
+  #combining predictor matrix and outcome vector to draw random samples from:
+  all_train <- data.frame(cbind(out_train, pred_int_train)) 
+  #defining beta to store values of regression coefficents:
+  beta <- matrix(c(0, 0, 0, 0, 0, 0, 0, 0, 0), nrow = 1)
+  #defining a matrix containing updated beta values after each iteration:
+  beta_upd <- matrix(NA, nrow = n, ncol = 9)
+  set.seed(1)
+  
+  #iterate over smaller random samples and update value of beta after each iteration:
+for (i in 1:n) {
+    #sampling 5 observations with replacement from our data frame:
+    all_train_sample <- as.matrix( all_train[sample(nrow(all_train), 5, replace = TRUE), ])
+    #obtaining predictor variable data from random samples:
+    pred_sample <- as.matrix(all_train_sample[,2:10])
+    #obtaining outcome variable data from random samples:
+    out_sample <- as.matrix(all_train_sample[,1])
+    #updating beta using random samples:
+    beta <- beta - alpha  * loss_par_deriv(pred_sample, out_sample, beta) 
+    #saving the theta values for each iteration:
+    beta_upd[i,] <- beta
+} 
+  return(beta_upd)
+}
+```
+
+#### Step 4 - SGD calculation
+First please note that the learning rate is denoted by $alpha$ in the SGD function. $alpha$ is a hyper-parameter that determines how quickly we descent down the gradient of the loss function^[Zulkifli, H., 2018, _Understanding Learning Rates and How It Improves Performance in Deep Learning_, viewed February 2, 2022,https://towardsdatascience.com/understanding-learning-rates-and-how-it-improves-performance-in-deep-learning-d0d4059c1c10]. In this model we set the learning rate $alpha$ to be 0.001 and implement SGD: 
+```{r}
+result <- stoch_gradDescent(pred_train, out_train, 0.001, 10000)
+```
+
+Then, we plot the above result to verify if convergence of the `beta` parameters can be achieved within 10,000 iterations.
+
+```{r, fig.height = 4, fig.width = 5, echo = FALSE}
+plot(result[,1],ylim=c(min(result),max(result)),ylab="Value", type = 'l',lwd=2,
+      xlab=paste("alpha=", 1),xaxt="n") #suppress auto x-axis title
+      lines(result[,1],type="l",col="blue")      
+      lines(result[,2],type="l",col="red")
+      lines(result[,3],type="l",col="green")
+      lines(result[,4],type="l",col="yellow")
+      lines(result[,5],type="l",col="purple")
+      lines(result[,6],type="l",col="black")
+      lines(result[,7],type="l",col="grey")
+      lines(result[,8],type="l",col="pink")
+      lines(result[,9],type="l",col="orange")
+```
+
+From the plot above we see that indeed the convergence is achieved. Hence, the Model 2 will now be of the following form:
+
+_CHARGE = 13463.62 + 3687.88(AGE) + 2114.52(BMI) + 445.64(CHILDREN) + 30.69(SEX_male) + 9513.44(SMOKER_yes) - 191.61(REGION_northwest) - 432.17(REGION_southeast) - 346.78(REGION_southwest)_
+
+#### Step 5 - assessing prediction accuracy.
+Based on the standardized test dataset we calculate the RMSE for Model 2 and find it to be USD 5,514. 
+
+Then we plot predicted `CHARGE` values against the observed ones for further illustration:
+```{r, include = FALSE}
+sgd_model <- lm(CHARGE ~ AGE + BMI + CHILDREN + SEX_male + SMOKER_yes + REGION_northwest +
+                  REGION_southeast + REGION_southwest, data = Insurance_test_std) 
+predictions = predict(sgd_model, newdata = Insurance_test_std) #predicted CHARGE 
+test_results = bind_cols(predictions, Insurance_test_std %>% select(CHARGE)) #predicted vs observed
+test_results = rename(test_results,  CHARGE_PRED= ...1, CHARGE_ACTUAL = CHARGE) #rename the columns
+rmse(test_results, truth = CHARGE_ACTUAL, estimate = CHARGE_PRED) #root mean squared error in USD
+```
+
+```{r, echo = FALSE, fig.height = 3, fig.width = 4}
+ggplot(test_results, aes(x = CHARGE_PRED, y = CHARGE_ACTUAL)) + 
+  geom_abline(lty = 2) + #45 degree diagonal line:
+  geom_point(alpha = 0.5) + 
+  labs(y = "Predicted CHARGE values", x = "Observed CHARGE values") +
+  coord_obs_pred() #scale and size the x- and y-axis uniformly:
+```
+
+***
+***CONCLUSION:*** the following linear regression Model 2 using SGD is as follows:
+
+_CHARGE = 13463.62 + 3687.88(AGE) + 2114.52(BMI) + 445.64(CHILDREN) + 30.69(SEX_male) + 9513.44(SMOKER_yes) - 191.61(REGION_northwest) - 432.17(REGION_southeast) - 346.78(REGION_southwest)_
+
+Using SGD allowed us to achieve an approximately 3% improvement in predictive pereformance compared to Model 1. 
+
+## SUB-SECTION 5.3 - MODEL 3 - GENERALIZED ADDITIVE MODEL (GAM)
+In this section a flexible linear approach that preserves interpretability will be used to build the Model 3. Building up on the multiple linear regression method implemented in Model 1, we apply the more general GAM framework, which allows for non-linear functions of each variable to be considered. This allows us to avoid manual variables transformation and ensure that no non-linear relationships are missed. Below you will find the steps we undertook to build, analyze and interpret Model 3. 
+
+The general GAM form of Model 3 is as follows: 
+
+_CHARGE = beta_0 + f_1(BMI) + f_2(AGE) + f_3(REGION_northwest) + f_4(REGION_southeast) + f_5(REGION_southwest) + f_6(CHILDREN) + f_7(SMOKER_yes) + epsilon_
+
+Further, `Insurance_train` and `Insurance_test` datasets with the ungrouped `CHILDREN` and `REGION` predictors are used to build Model 3. This is because we choose to forego some degree of interpretability and fully utilize the information provided by `CHILDREN` and `REGION` to improve the model's predictive accuracy. 
+
+#### Step 1 - load the library containing GAM tools and obtain the GAM baseline model. 
+```{r, results = 'hide', error = FALSE, warning = FALSE, message = FALSE}
+library(gam) 
+```
+
+Below is the GAM baseline model using natural splines. 
+```{r}
+gam_baseline = lm(CHARGE ~ ns(BMI, 4) + ns(AGE, 5) + REGION_northwest + REGION_southeast 
+                  + REGION_southwest + CHILDREN + SMOKER_yes, data = Insurance_train)
+```
+The model is essentially a slight extension of our linear regression Model 1 with the only difference of using appropriate basis functions for the natural splines. Please note the variable `SEX` was excluded as per the analysis in step 2, SUB-SECTION 5.1. 
+
+To determine if `AGE` and `BMI` could be assumed linear we resort to the below plots. From them we see that while `AGE` may be assumed to be linear, `BMI` is highly non-linear.
+
+```{r, fig.height = 4, fig.width = 7, echo = FALSE}
+par(mfrow = c(2,4))
+plot.Gam(gam_baseline , se = TRUE , col = "red")
+```
+
+#### Step 2 - build and compare GAM candidate models. 
+Based on the nature of the variables `AGE` and `BMI`, let us construct the GAM candidate models:
+```{r}
+#Candidate Model 1 - AGE and BMI non-linear:
+gam_model_1 = gam(CHARGE ~ s(BMI, 4) + s(AGE, 5) +  REGION_northwest + REGION_southeast + 
+                    REGION_southwest + CHILDREN + SMOKER_yes, data = Insurance_train) 
+#Candidate Model 2 - BMI non-linear:
+gam_model_2 = gam(CHARGE ~ s(BMI, 4) + AGE +  REGION_northwest + REGION_southeast + 
+                    REGION_southwest + CHILDREN + SMOKER_yes, data = Insurance_train) 
+#Candidate Model 3 - AGE non-linear:
+gam_model_3 = gam(CHARGE ~ BMI + s(AGE,5) +  REGION_northwest + REGION_southeast + 
+                    REGION_southwest + CHILDREN + SMOKER_yes, data = Insurance_train) 
+```
+
+Comparing the GAM candidate models using the ANOVA approach:
+```{r}
+anova(gam_baseline, gam_model_1, gam_model_2, gam_model_3, test = "F")
+```
+
+Based on the ANOVA output above, there is significant evidence that the Candidate Model 1 with non-linear functions of `AGE` and `BMI` is superior to the rest of the candidate models (judged by p-values). Hence, the Candidate Model 1 is chosen to be our Model 3, the GAM model using smoothing splines.
+
+#### Step 3 - Model 3 analysis and interpretation.
+Let's perform the analysis of Model 3.
+```{r}
+summary(gam_model_1)
+```
+The results of ANOVA for Parametric effects from the summary table above suggest that choosing model with the non-linear `AGE` and `BMI` was the right decision to make, as the p-values for `AGE` and `BMI` are extremely low (both <0.0015). 
+
+Given the additive nature of GAMs, we can easily examine the effects of each predictor on the response variable `CHARGE` individually, while holding all other variables fixed. For that we use the plots below.
+```{r, fig.height = 4, fig.width = 7, echo = FALSE}
+par(mfrow = c(2, 4))
+plot(gam_model_1, se = TRUE, col = "blue")
+```
+Based on the analysis of the plots, we infer the following:
+
+- ***AGE***: holding all other variables fixed, medical costs billed by health insurance tend to increase with age. This relationship was also observed in Model 1.   
+
+- ***BMI***: in general, medical costs billed by health insurance rise as one's BMI increases. Whilst this trend was also observed in Model 1, more details are revealed by the GAM Model 3. In particular, based on the visual inspection of the graph, the rate at which the costs are rising is higher for BMI values of rougly less than 35. The explanation for this could be the following. According to the Centres for Disease Control and Prevention, people with BMI above 35 could be classified as having class two obesity^[CDC, 2021, _Defining Adult Overweight and Obesity_, viewed 2 February 2022, https://www.cdc.gov/obesity/adult/defining.html]. It could be argued that past a certain point obesity-related health issues become very similar, meaning that a person becoming even more obese will lead to a less than proportional increase in his or her medical bills. 
+
+- ***SMOKER_yes, CHILDREN***: similarly to what was found in Model 1, being a smoker and having more dependents tend to increase medical costs incurred by health insurance.
+
+- ***REGION_southeast, REGION_southwest, REGION_northwest***: living in the northeast of the US is associated with higher medical costs compared to all the other US regions.
+
+#### Step 4 - Assessing prediction accuracy.
+Based on the test set we calculate the RMSE for Model 3 and find it to be USD 5,649. 
+
+Then we plot predicted `CHARGE` values against the observed ones for further illustration:
+```{r, include = FALSE}
+predictions = predict(gam_model_2, newdata = Insurance_test) 
+test_results = bind_cols(predictions, test_data %>% select(CHARGE)) 
+test_results = rename(test_results,  CHARGE_PRED= ...1, CHARGE_ACTUAL = CHARGE)
+rmse_gam = rmse(test_results, truth = CHARGE_ACTUAL, estimate = CHARGE_PRED) 
+print(rmse_gam)
+```
+```{r, echo = FALSE, fig.height = 3, fig.width = 4}
+ggplot(test_results, aes(x = CHARGE_PRED, y = CHARGE_ACTUAL)) + 
+  geom_abline(lty = 2) + 
+  geom_point(alpha = 0.5) + 
+  labs(y = "Predicted CHARGE values", x = "Observed CHARGE values") +
+  coord_obs_pred() 
+```
+
+As seen from the plot, the data points are more closely scattered around the 45* line, indicating an improvement in the model's predictive accuracy compared to Models 1 and 2 while retainig some degree of interpretability.
+
+***
+***CONCLUSION:*** we obtained a relatively interpretable and flexible GAM model 3. Yet, the drawback of this approach is that important interactions between predictors may be missed, such as, for instance, an interaction  between `AGE` and `SMOKER_yes`. We attempt to address this issue in Model 4. Furthermore, an even more flexible approach using regression trees will be considered in Model 5. 
+
+## SUB-SECTION 5.4 - MODEL 4 - HIGH DIMENSIONAL MODEL
+A high-dimensional model is sought with neither particular predictive accuracy nor interpretability goals in mind. The model will be built based on the the baseline Model 1 obtained in SUB-SECTION 5.1:
+
+_CHARGE = -12697 + 260.2(AGE) + 355.86(BMI) - 752.51(REGION_south) + 730.91(KIDS) + 23,105.34(SMOKER_yes)_
+
+As only five predictor variables are used in the baseline model, we choose to increase the dimensionality of the model by considering non-linear transformations of predictor variables and the outcome variable as well as different interaction terms between the predictors. Suitable transformations and interaction terms are assessed on the basis of Adjusted R^2. Increase in Adjusted R^2 indicates an improvement in a model while accounting for the number of terms included in the model.
+
+Let us build Model 4.
+
+#### Step 1 - transforming the outcome variable `CHARGE`.
+First, let us plot a histogram of the outcome variable `CHARGE` to see if there are any issues. 
+
+```{r, fig.height = 3, fig.width = 4, echo = FALSE}
+hist(CHARGE) 
+```
+
+It is clear from the histogram above that the outcome variable `CHARGE` is highly skewed, so a log transformation is applied to make the distribution of `CHARGE` more normal. Please see the plot below. 
+
+```{r, fig.height = 3, fig.width = 4, echo = FALSE}
+hist(log(CHARGE))
+```
+
+Let us now consider a Candidate 1 Model with a transformed outcome variable:
+```{r}
+Candidate_1 = lm(log(CHARGE) ~ AGE + BMI + KIDS + SMOKER_yes + REGION_south, 
+                 data = Insurance_train_recoded)
+```
+Compared to the baseline Model 1, using log(CHARGE) instead of CHARGE leads to an improvement of the model as adjusted R^2 rises from 74.93% to 75.19%. 
+
+#### Step 2 - transforming continous predictor variables AGE and BMI.
+Now, we transform each of the two continuous predictor variables in the model. We seek to choose the best transformation on each X predictor variable among this list: log(X), exp(X), sqrt(X), X^2, X^3, X^4, X^5.
+
+We explore the correlations between `log(CHARGE)` and each transformed predictor variable. The transformation which yields the largest correlation with `log(CHARGE)` is then chosen because this indicates the strongest linear relationship between `log(CHARGE)` and the transformed variable. 
+ 
+The largest correlations obtained with log(CHARGE) are with log(AGE) and log(BMI):
+```{r}
+cor(log(CHARGE), log(AGE))
+cor(log(CHARGE), log(BMI)) 
+```
+
+Upon adding the transformations log(AGE), log(BMI) separately as well as simultaneously Candidate Model 2 with only log(BMI) transformation results in the largest improvement in adjusted R^2 from 75.19% to 75.24%:
+```{r}
+Candidate_2 = lm(log(CHARGE) ~ AGE + log(BMI) + KIDS + SMOKER_yes + REGION_south, 
+                 data = Insurance_train_recoded)
+```
+
+#### Step 3 - interaction terms.
+One by one, we assess the changes in Adjusted R^2 when adding interaction terms to Candidate Model 2. Please see the table below, which consists of the most promising significant interaction terms:
+
+```{r, echo = FALSE}
+int_table = matrix(NA, nrow = 6, ncol = 2)
+colnames(int_table) = c("Interaction", "Adjusted R^2")
+int_table[1,] = c("AGE*SMOKER_yes ", "80.27%")
+int_table[2,] = c("log(BMI)*SMOKER_yes", "77.66%")
+int_table[3,] = c("AGE*KIDS", "76.66%")
+int_table[4,] = c("KIDS*SMOKER_yes", "76.83%")
+int_table[5,] = c("SMOKER_yes*REGION_south", "76.60%")
+int_table[6,] = c("AGE*REGION_south", "76.35%")
+kable(int_table, caption = "MOST PROMISING SIGNIFICANT INTERACTION TERMS")
+```
+
+#### Step 4 - obtaining a high-dimensional Model 4. 
+Let us add all significant interaction terms to increase dimensionality of model: 
+```{r}
+Candidate_3 = lm(log(CHARGE) ~ AGE + log(BMI) + KIDS + SMOKER_yes + REGION_south
+                   + AGE*KIDS + AGE*SMOKER_yes + AGE*REGION_south + log(BMI)*SMOKER_yes + 
+                   KIDS*SMOKER_yes + SMOKER_yes*REGION_south, 
+                 data = Insurance_train_recoded )
+```
+
+The issue here is that the p-value of log(BMI) is substantially larger than 0.05, indicating that it is a highly insignificant variable in the model. Let us therefore remove log(BMI) along with the interaction term that includes it (log(BMI)*SMOKER_yes) to obtain Candidate Model 4. 
+```{r}
+Candidate_4 = lm(log(CHARGE) ~ AGE  + KIDS + SMOKER_yes + REGION_south  + AGE*KIDS 
+                 + AGE*SMOKER_yes + AGE*REGION_south + KIDS*SMOKER_yes 
+                 + SMOKER_yes*REGION_south, 
+                 data = Insurance_train_recoded) #removed log(BMI) and log(BMI)*SMOKER_yes
+summary(Candidate_4)
+```
+All variables in Candidate Model 4 are indeed now significant, and we have maximized the number of interaction terms which can be included in our target Model 4. Therefore, this model is the best high-dimensional model we could have obtained and we choose it to be our final High-dimensional Model 4 with 10 terms:
+
+_log(CHARGE) = 7.08 + 0.04(AGE) + 0.65(KIDS) + 2.65(SMOKER_yes) - 0.39(REGION_south) - 0.009(AGE\*KIDS) - 0.03(AGE\*SMOKER_yes) + 0.006(AGE\*REGION_south) - 0.32(KIDS\*SMOKER_yes) +0.28(SMOKER_yes\*REGION_south)_
+
+#### Step 5 - assessing prediction accuracy. 
+Based on the test set we calculate the RMSE for Model 1 and find it to be USD 6,450. 
+
+Then we plot predicted `CHARGE` values against the observed ones for further illustration:
+```{r, include = FALSE}
+predictions = predict(Candidate_4, newdata = Insurance_test_recoded) #predicted log(CHARGE)
+finalpredictions = exp(predictions) #predicted CHARGE
+test_results_ = bind_cols(finalpredictions, Insurance_test_recoded %>% select(CHARGE))
+test_results_ = rename(test_results_,  CHARGE_PRED= ...1, CHARGE_ACTUAL = CHARGE) 
+rmse(test_results_, truth = CHARGE_ACTUAL, estimate = CHARGE_PRED) 
+```
+
+```{r, echo = FALSE, fig.height = 3, fig.width = 4}
+ggplot(test_results_, aes(x = CHARGE_PRED, y = CHARGE_ACTUAL)) + 
+  geom_abline(lty = 2) + #45 degree diagonal line:
+  geom_point(alpha = 0.5) + 
+  labs(y = "Predicted CHARGE values", x = "Observed CHARGE values") +
+  coord_obs_pred() #scale and size the x- and y-axis uniformly:
+```
+
+\newpage 
+
+*** 
+
+***CONCLUSION:*** The high dimensional Model 4 is obtained: 
+log(CHARGE) = 7.08 + 0.04(AGE) + 0.65(KIDS) + 2.65(SMOKER_yes) - 0.39(REGION_south) - 0.009(AGE\*KIDS) - 0.03(AGE\*SMOKER_yes) + 0.006(AGE\*REGION_south) - 0.32(KIDS\*SMOKER_yes) +0.28(SMOKER_yes*REGION_south)
+
+While we achieved our goal of increasing Model 1's dimensionality by introducing interaction terms and transformations, we nevertheless note there is a risk of multicollinearity, which should be assessed further, please refer to SECTION 6, LIMITATIONS AND IMPROVEMENTS.
+
+The model is relatively suitable for interpretational purposes as the relationships between the predictors and the outcome variable `CHARGE` are similar to those discovered in Model 1. At the same time, we recognize that Model 4's predictive accuracy is relatively low and could be potentially improved.
+
+## SUB-SECTION 5.5 - MODEL 5 - BOOSTED REGRESSION TREES MODEL
+Here boosting is applied on the basis of regression trees to achieve a model with higher predictive accuracy at the expense of interpretability. To account for complex relationships between the predictors and the response variable, multiple trees are produced and then combined yielding a single prediction. Below we describe the steps taken to build and analyze Model 5. 
+
+Further note that `Insurance_train` and `Insurance_test` datasets with the ungrouped `CHILDREN` and `REGION` predictors are used to build Model 5. This is because we choose to fully utilize the information provided by `CHILDREN` and `REGION` to achieve the highest predictive accuracy. 
+
+#### Step 1 - load the library to fit boosted regression trees.
+```{r, results = 'hide', error = FALSE, warning = FALSE, message = FALSE}
+library(gbm)
+```
+
+#### Step 2 - fit the model on the training data and obtain some summary plots and statistics. 
+First please note that in the code below the optimal `interaction.depth` and `shrinkage parameters` have been established empirically as well as using some theoretical grounds^[StackExchange, _2015, How to find optimal values for the tuning parameters in boosting trees_, viewed 2 February 2022, https://stats.stackexchange.com/questions/103495/how-to-find-optimal-values-for-the-tuning-parameters-in-boosting-trees].
+
+Based on the relative influence plot and the relative influence statistics below, predictors such as `SMOKER_yes`, `BMI` and `AGE` are by far the most important variables. This is further supported by the partial dependence plots below.
+```{r, fig.height = 3.5, fig.width = 4}
+boosting_model <- gbm(CHARGE ~., data= Insurance_train,
+                       distribution = "gaussian", n.trees = 5000,
+                       interaction.depth = 7, shrinkage = 0.0008, verbose = F)
+summary(boosting_model)
+```
+
+Partial dependence plots for the predictors:
+
+```{r, fig.height = 2.7, fig.width = 3.3, echo = FALSE}
+par(mfrow = c(1,2))
+plot(boosting_model, i = "BMI")
+plot(boosting_model, i = "SMOKER_yes")
+```
+
+```{r, fig.height = 2.7, fig.width = 3.3, echo = FALSE}
+par(mfrow = c(1,2))
+plot(boosting_model, i = "AGE")
+plot(boosting_model, i = "CHILDREN")
+```
+
+```{r, fig.height = 2.7, fig.width = 3.3, echo = FALSE}
+par(mfrow = c(1,2))
+plot(boosting_model, i = "REGION_southeast")
+plot(boosting_model, i = "REGION_southwest")
+```
+
+```{r,fig.height = 2.7, fig.width = 3.3, echo = FALSE}
+par(mfrow = c(1,2))
+plot(boosting_model, i = "REGION_northwest")
+```
+
+The plots illustrate the marginal effects of `SMOKER_yes`, `BMI` and `AGE` on `CHARGE` after integrating out other variables. As expected, medical costs billed by health insurance increase with both `BMI` and `AGE`. Moreover, higher bills are associated with people who smoke, have more dependents and live in the north of the US. This goes in line with conclusions made for Model 1. 
+
+#### Step 3 - assessing prediction accuracy.
+Based on the test set we calculate the RMSE for Model 1 and find it to be USD 4,305 
+
+Then we plot predicted `CHARGE` values against the observed ones for further illustration:
+```{r, include = FALSE}
+predictions_boost <- predict(boosting_model, newdata = Insurance_test, n.trees = 5000)
+test_results_boost = bind_cols(predictions_boost, Insurance_test %>% select(CHARGE))
+test_results_boost = rename(test_results_boost,  CHARGE_PRED = ...1, CHARGE_ACTUAL = CHARGE) 
+trees_rmse = rmse(test_results_boost, truth = CHARGE_ACTUAL, estimate = CHARGE_PRED) 
+print(trees_rmse)
+```
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4}
+ggplot(test_results_boost, aes(x = CHARGE_PRED, y = CHARGE_ACTUAL)) + 
+  geom_abline(lty = 2) + 
+  geom_point(alpha = 0.5) + 
+  labs(y = "Predicted CHARGE values", x = "Observed CHARGE values") +
+  coord_obs_pred()
+```
+
+\newpage
+
+***
+***CONCLUSION:*** we obtained a highly flexible and relatively interpretable Model 5 through boosting regression trees. Most importantly, Model 5 has achieved the highest prediction accuracy compared to Models 1 to 4. 
+
+## SUB-SECTION 5.6 - MODELS SUMMARY
+We obtained five distinct models using various Machine Learning techniques. The information on the models is summarized below. 
+```{r, echo = FALSE}
+summary_table = matrix(NA, nrow = 5, ncol = 5)
+colnames(summary_table) = c("Model", "RMSE", "Predictive Accuracy", "Degree of interpretability", "Objective")
+summary_table[1,] = c( "Model 1 - Multiple Linear Regression", "5,688", "medium", "highest", " Baseline model")
+summary_table[2,] = c( "Model 2 - SGD", "5,514", "medium" , "highest", "Gradient descent based model")
+summary_table[3,] = c("Model 3 - GAM", "5,614", "medium", "medium", "Non-baseline (relatively) interpretable model")
+summary_table[4,] = c( "Model 4 - High Dimensional", "6,450", "lowest", "medium", "(Relatively) high-dimensional model")
+summary_table[5,] = c("Model 5 - Boosted Regression Trees", "4,305", "highest", "lowest", "(Relatively) more focused on predictive accuracy without interpretability.")
+kable(summary_table, caption = "MODELS SUMMARY")
+```
+The Machine Learning methods were selected in such a way that each of the five models is tailored specifically to meet the aim of the study. In our opinion, the most interpretable model was found to be Models 1 and 2, whilst the highest predictive accuracy was achieved by Model 5. Overall, we believe that these models could be used in practice to analyze and predict insurance premiums to help insurance companies stay profitable. We acknowledge that there are limitations associated with our models and we discuss them in the next section. 
+
+# SECTION 6 - LIMITATIONS AND IMPROVEMENTS
+We realize that each model has its own limitations for which we suggest improvements.
+
+***MULTIPLE LINEAR REGRESSION MODEL 1***
+
+***Limitation:***
+Model 1 is built based on the best subsets variables selection method. For the method to be effective we assumed that the number of predictor variables in Model 1 is not so large compared to the number of observations in the data. However, if our assumption was incorrect, best subset may result in overfitting the training data and giving poor predictions for the test data. Relatively high RMSE values were indeed observed in Model 1. Overfitting may further result in high variance for the coefficient estimates, hindering Model 1 interpretability. 
+
+***Improvement:***
+Explore other variable selection methods such as stepwise methods to see if the same subset of predictors can be achieved.
+
+***STOCHASTIC GRADIENT DESCENT MODEL 2***
+
+***Limitation:***
+Using Stochastic Gradient Descent to fit Model 2 might be computationally expensive. This is because unlike Gradient Descent, where the parameters are updated on the entire training sample, SGD is updating them on each individual random training sample obtained as part of SGD calculation. Additionally, minimizing an alternative loss function instead of the MSE function might lead to higher predictive accuracy^[Donges, N., 2021, _Gradient Descent: An Introduction to 1 of Machine Learning’s Most Popular Algorithms_,  viewed 2 February 2022, https://builtin.com/data-science/gradient-descent]. 
+
+***Improvement:***
+Explore minimizing an alternative loss function such as quadratic error loss as well as implementing Gradient Descent or Mini-Batch Gradient Descent.
+
+***GAM MODEL 3***
+
+***Limitation:***
+The GAM model obtained is restricted to be additive, meaning that important interactions between the response variables are missed. Put simply, from the EDA  it is clear that there exist interactions between `SMOKER` and `AGE`. This, however, is not taken into account by the model, potentially hindering its predictive accuracy. 
+
+***Improvement:***
+Manually add interaction terms to the GAM model, similarly to how it was done in Model 4. 
+
+***HIGH-DIMENSIONAL MODEL 4***
+
+***Limitation:***
+Model 4 contains a large number of interaction terms which is likely to create a severe problem of mutlicollinearity between the variables in this multiple linear regression model. As this reduces the accuracy of the coefficent estimates, we cannot obtain valid associations between each predictor variable and the outcome `CHARGE`.
+
+***Improvement:***
+Obtain VIF values for Model 4 to see the effects of introducing these interaction terms. If these are alarmingly high, identify only those interaction terms for which there is no problem of multicollinearity.
+
+***BOOSTED REGRESSION TREE MODEL 5:***
+
+***Limitation:***
+Model 5's predictive accuracy could have been impacted by the fact that the boosting procedure used is sensitive to outliers. In other words, given that the values of `CHARGE` are highly positively skewed, outliers may be present in the data. These points could have been removed at the data editing stage of the analysis. 
+
+***Improvement:***
+To see if retaining or removing outliers has a substantial impact on Model 5's predictive power, explore building two models based on the datasets with and without outliers and compare their predictive accuracy. 
+
+# SECTION 7 - FURTHER WORK DIRECTIONS
+
+In the future our study of insurance premiums could potentially be further extended in the following three directions. 
+
+  Firstly, in the above study we use machine learning techniques applicable to a continuous outcome variable. In order to be able to apply other machine learning methods the outcome variable `CHARGE` could be converted to a categorical variable. This would allow us to apply other techniques such nearest neighbours, logistic regression, support vector machines and so on.
+
+  Secondly, the five models above were based on only six predictors available in the Kaggle dataset. More thorough models could potentially be built by considering other factors which may affect individual medical costs billed by health insurance such as income, job occupation, medical history, profession and so on.
+
+  Thirdly, our study was focused on the US only. We could potentially explore individual medical costs billed by medical insurance in other countries to account for differences between various countries such as social, geographical, ethnical and cultural.
+
+# SECTION 8 - CONCLUSION
+In our study we attempted to predict and explore social and demographic factors that might be associated with the medical costs billed by health insurance companies and hence health insurance premiums to advise actuaries on pricing the health insurance policies. We used publicly available data and analysed it with the help of the five statistical models built using multiple machine learning techniques.
+
+We constructed five models each tailored to the aim of the study. We believe that Models 1 and 2 are the most interpretable ones, whilst Model 5 achieved the highest predictive accuracy. The rest of the models achieve interpretability and predictive accuracy goals to various acceptable extents.
+
+Overall, taking into account limitations of the study and the need for further improvement in some areas, we conclude that being older and having higher BMI is associated with higher health insurance premiums. Moreover, smoking, having more dependents and
+living in the North of the US are further factors increasing insurance premiums. Therefore, we believe, our study might be of help for professionals who determine the health insurance premiums to ensure profitability of the insurance companies.  
+
+# SECTION 9 - REFERENCES
+- CDC, 2021, _Defining Adult Overweight and Obesity_, viewed 2 February 2022, https://www.cdc.gov/obesity/adult/defining.html
+- Donges, N., 2021, _Gradient Descent: An Introduction to 1 of Machine Learning’s Most Popular Algorithms_,  viewed 2 February 2022, https://builtin.com/data-science/gradient-descent
+- Dutta, S., 2019. _Why Stochastic Gradient Descent works?_, viewed 2 Februray, 2022, https://towardsdatascience.com/https-towardsdatascience-com-why-stochastic-gradient-descent-works-9af5b9de09b8
+- Estevez, E. 2021, _How Age Affecets Lifee Insurance_, viewed 2 Februray, 2022, https://www.investopedia.com/articles/personal-finance/022615/how-age-affects-life-insurance-rates.asp
+- Izumi, Y., Tsuji, I., Ohkubo, T., Kuwahara, A., Nishino, Y., Hisamichi, S., 2001. _Impact of smoking habit on medical care use and its costs: a prospective observation of National Health Insurance beneficiaries in Japan_, viewed February 2, 2022, https://academic.oup.com/ije/article/30/3/616/736943
+- Jaadi, Z. 2021, _When and Why to Standardize Your Data_, viewed 2 February 2022, https://builtin.com/data-science/when-and-why-standardize-your-data
+- LifeSEARCH, 2022. _What is BMI and why is it important?_, viewed February 2, 2022, https://www.lifesearch.com/advice-and-guides/what-is-bmi-and-why-is-it-important 
+- Loukas, S., 2020, _How and why to Standardize your data: A python tutorial_, viewed February 2, 2022, https://towardsdatascience.com/how-and-why-to-standardize-your-data-996926c2c832 
+- StackExchange, _2015, How to find optimal values for the tuning parameters in boosting trees_, viewed 2 February 2022, https://stats.stackexchange.com/questions/103495/how-to-find-optimal-values-for-the-tuning-parameters-in-boosting-trees
+- Topor, J., 2016 _Multivariate Linear Regression Analysis using Stochastic Gradient Descent_, viewed February 2, 2022, https://rpubs.com/jt_rpubs/279269
+- Zulkifli, H., 2018, _Understanding Learning Rates and How It Improves Performance in Deep Learning_, viewed February 2, 2022,https://towardsdatascience.com/understanding-learning-rates-and-how-it-improves-performance-in-deep-learning-d0d4059c1c10
